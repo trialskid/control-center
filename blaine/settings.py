@@ -145,14 +145,18 @@ if not DEBUG:
     }
 
     # Production security settings
-    SECURE_SSL_REDIRECT = True
-    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
-    SESSION_COOKIE_SECURE = True
+    # Only enable SSL redirect when a reverse proxy (Caddy/Nginx) handles TLS.
+    # Set SECURE_SSL=true in .env to activate.
+    if os.environ.get('SECURE_SSL', 'false').lower() in ('true', '1', 'yes'):
+        SECURE_SSL_REDIRECT = True
+        SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+        SECURE_HSTS_SECONDS = 31536000
+        SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+        SECURE_HSTS_PRELOAD = True
+        SESSION_COOKIE_SECURE = True
+        CSRF_COOKIE_SECURE = True
+
     SESSION_COOKIE_HTTPONLY = True
-    CSRF_COOKIE_SECURE = True
     CSRF_COOKIE_HTTPONLY = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
 

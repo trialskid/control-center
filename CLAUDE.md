@@ -120,7 +120,7 @@ Seven Django apps, all relationally linked:
 - **Advanced Filtering**: All list pages use `<form id="filter-form">` wrapping all inputs. Sortable column headers with `sort`/`dir` query params and arrow indicators. Date range `<input type="date">` filters. Multi-select status/type via checkbox groups with `getlist()`.
 - **Bulk Operations**: All list pages have select-all checkbox, per-row checkboxes, and a sticky bulk action bar (hidden until items selected). `static/js/bulk-actions.js` handles select-all toggle, count tracking, and bar visibility. Bulk delete (with confirmation modal), bulk export CSV, and bulk mark-complete (tasks only) views per app.
 - **Button colour scheme**: Detail pages use purple (PDF/export), blue (Edit), green (Complete), red (Delete). List pages use purple for export buttons, blue for "+ New".
-- **Environment config**: `settings.py` uses `os.environ.get()` with dev-friendly fallbacks for SECRET_KEY, DEBUG, ALLOWED_HOSTS, DATABASE_PATH, EMAIL_BACKEND — local dev works without `.env`. SECRET_KEY raises `ValueError` if unset when `DEBUG=False`. Production security headers (SSL redirect, HSTS, secure cookies) gated behind `not DEBUG`.
+- **Environment config**: `settings.py` uses `os.environ.get()` with dev-friendly fallbacks for SECRET_KEY, DEBUG, ALLOWED_HOSTS, DATABASE_PATH, EMAIL_BACKEND — local dev works without `.env`. SECRET_KEY raises `ValueError` if unset when `DEBUG=False`. SSL redirect, HSTS, and secure cookies require `SECURE_SSL=true` env var (only set when a reverse proxy handles TLS). `SESSION_COOKIE_HTTPONLY`, `CSRF_COOKIE_HTTPONLY`, and `SECURE_CONTENT_TYPE_NOSNIFF` are always on when `DEBUG=False`.
 - **Tailwind CSS**: Standalone CLI binary (v3.4.17, no Node.js). Config in `tailwind.config.js`, source in `static/css/input.css`, output at `static/css/tailwind.css`. Local dev: `make tailwind-install && make tailwind-watch`. Docker builds CSS during image build and discards the binary. After adding/changing Tailwind classes, rebuild with `make tailwind-build`.
 - **Static files**: WhiteNoise serves static files in production (`CompressedManifestStaticFilesStorage` when `DEBUG=False`); standard Django staticfiles in dev
 - **Media serving**: Unconditional `re_path` in `urls.py` (no Nginx needed for single-user app)
@@ -170,5 +170,24 @@ Seven Django apps, all relationally linked:
 - Advanced filtering on all list pages — sortable column headers (click to toggle asc/desc with arrow indicators), date range inputs, multi-select status/type checkbox groups, unified `<form id="filter-form">` with `hx-include`
 - Bulk operations on all list pages — select-all checkbox, per-row checkboxes, bulk action bar (delete selected, export selected CSV), tasks also have bulk mark-complete; confirmation modal for bulk delete
 
-### Next Steps
-- User authentication (currently no login required — fine for single-user VPN access)
+### Next Steps — Production Hardening (Single-User)
+
+#### Tier 1 — Must-have
+- **Login protection** — Add `LoginRequiredMixin` to all views + login template. Django's built-in auth is already installed; just needs a login page and middleware config.
+- **HTTPS with reverse proxy** — Add Caddy service to `docker-compose.yml` with auto-TLS (Let's Encrypt). App already sets `SECURE_SSL_REDIRECT` and `SECURE_PROXY_SSL_HEADER` when `DEBUG=False`.
+- **Real SECRET_KEY** — Generate and set in `.env`. Already enforced when `DEBUG=False`.
+- **Automated SQLite backups** — Cron job or django-q2 scheduled task to copy `db.sqlite3` to timestamped backup location (local or remote via rsync/S3).
+
+#### Tier 2 — Should-have
+- **SQLite WAL mode** — Better concurrent read/write with django-q2 worker. Set `PRAGMA journal_mode=WAL` in settings or entrypoint.
+- **Session timeout** — `SESSION_COOKIE_AGE = 86400` + `SESSION_EXPIRE_AT_BROWSER_CLOSE = True`.
+- **Rate limiting on login** — `django-axes` or `django-ratelimit` to prevent brute-force attempts.
+- **Content Security Policy** — `django-csp` middleware; whitelist CDN domains for Chart.js, FullCalendar, Cytoscape.js.
+- **Logging** — Configure Django `LOGGING` dict with file output and rotation. Capture errors, 404s, auth failures.
+
+#### Tier 3 — Nice-to-have
+- **Health check endpoint** — `/health/` view returning 200 + DB connectivity check for Docker/monitoring.
+- **Media file auth** — Wrap media serving view with `login_required` so uploaded evidence/attachments require authentication.
+- **Media backups** — Periodic copy/rsync of media volume alongside SQLite backups.
+- **Error alerting** — Send email on 500 errors via Django `ADMINS` setting (SMTP already configured in DB).
+- **Docker resource limits** — Set `mem_limit` and `cpus` in compose to prevent runaway processes.
